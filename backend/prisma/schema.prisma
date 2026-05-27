@@ -1,0 +1,432 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                String            @id @default(uuid())
+  email             String            @unique
+  password          String
+  name              String?
+  role              String            @default("USER") // USER, ADMIN, AGENT
+  parentId          String?
+  parent            User?             @relation("TeamMembers", fields: [parentId], references: [id], onDelete: Cascade)
+  members           User[]            @relation("TeamMembers")
+  
+  // SaaS Settings & Master Toggle (API-only)
+  apiAccessToken          String?
+  apiPhoneNumberId        String?
+  apiWabaId               String?
+  
+  // Billing & SaaS Limits
+  subscriptionPlan  String            @default("FREE")
+  subscriptionEnd   DateTime?
+  aiCreditsBalance  Float             @default(0.0)
+  widgetId          String?           @unique @default(uuid())
+  
+  // AI Bot limits and configs
+  aiActive                Boolean           @default(false) // Toggle AI ON/OFF
+  aiResponseLimit         Int               @default(1000) // Custom limit
+  aiResponseCount         Int               @default(0) // Message counter
+  
+  // Token Billing system fields
+  aiTokensPurchased       Int               @default(0)
+  aiTokensUsed            Int               @default(0)
+  aiTokensRemaining       Int               @default(1000) // 1000 free tokens initially
+  
+  // New AI fields for Telegram
+  aiActiveTelegram        Boolean           @default(false)
+  aiResponseLimitTelegram Int               @default(1000)
+  aiResponseCountTelegram Int               @default(0)
+
+  // New AI fields for Web Widget
+  aiActiveWeb             Boolean           @default(false)
+  aiResponseLimitWeb      Int               @default(1000)
+  aiResponseCountWeb      Int               @default(0)
+
+  // AI Persona & Instructions Settings
+  aiPersonality           String            @default("Professional") // Friendly, Professional, Sales, Support, Custom
+  aiInstructions          String?           @db.Text
+  aiTakeoverKeywords      String            @default("human,support,agent,talk to agent,live support")
+  
+  // Chatbot configurations
+  chatbotName             String            @default("Vexo Assistant")
+  chatbotColor            String            @default("#10B981")
+  chatbotWelcome          String            @default("Hi! Welcome to our store. How can we help you today?")
+  chatbotFallback         String            @default("Sorry, I didn't catch that. Please type the option number.")
+  businessBio             String?           @db.Text
+  chatbotIsActive         Boolean           @default(true)
+
+  // WhatsApp Business Profile and Configuration settings
+  whatsappBizName             String?
+  whatsappBizStatus           String?
+  whatsappBizAddress          String?           @db.Text
+  whatsappBizEmail            String?
+  whatsappBizWebsite          String?
+  whatsappBizIndustry         String?
+  whatsappReceiveCalls        Boolean           @default(false)
+  whatsappShowCallIcon        Boolean           @default(false)
+  whatsappCallbackPermission  Boolean           @default(false)
+  whatsappHoursConfigured     Boolean           @default(false)
+  whatsappBusinessHours       Json?             // { mon:{open,close,enabled}, tue:..., wed:..., thu:..., fri:..., sat:..., sun:... }
+  whatsappFlowId              String?
+  whatsappFlow                ChatbotFlow?      @relation("WhatsappFlow", fields: [whatsappFlowId], references: [id], onDelete: SetNull)
+
+  // Integrations
+  calendlyToken       String?
+  calendlyWebhookUrl  String?
+  shopifyStoreUrl     String?
+  shopifyAccessToken  String?
+  wordpressStoreUrl   String?
+  wordpressAccessToken String?
+
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  contacts          Contact[]
+  contactGroups     ContactGroup[]
+  contactLabels     ContactLabel[]
+  messages          Message[]
+  chatbotFlows      ChatbotFlow[]
+  telegramBots      TelegramBot[]
+  telegramNotes     TelegramNote[]
+  telegramContacts  TelegramContact[]
+  campaigns         Campaign[]
+  billingLogs           BillingTransaction[]
+  aiUsageLogs           AiUsageLog[]
+  shortLinks            ShortLink[]
+  wallet                Wallet?
+  walletTransactions    WalletTransaction[]
+  rechargeOrders        RechargeOrder[]
+  mediaFiles            MediaFile[]
+  storageUsage          StorageUsage?
+  knowledgeBase         KnowledgeBase[]
+  aiLogs                AiLog[]
+}
+
+// ─── WALLET / TOKEN SYSTEM ────────────────────────────────────────────────────
+
+model Wallet {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenBalance   Int      @default(0)
+  totalRecharged Int      @default(0)
+  totalSpent     Int      @default(0)
+  updatedAt      DateTime @updatedAt
+}
+
+model WalletTransaction {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type          String   // RECHARGE | DEDUCT | REFUND | ADMIN_ADD
+  tokens        Int      // positive = credit, negative = debit
+  description   String   // "WhatsApp Campaign Broadcast", "AI Reply" etc.
+  service       String?  // WHATSAPP | SMS | AI | STORAGE | RECHARGE
+  refId         String?  // Campaign ID, Message ID etc.
+  balanceBefore Int
+  balanceAfter  Int
+  createdAt     DateTime @default(now())
+}
+
+model PricingRule {
+  id        String  @id @default(uuid())
+  service   String  @unique // SMS | WHATSAPP_UTILITY | WHATSAPP_MARKETING | AI_REPLY | OTP | STORAGE_MB
+  tokenCost Int     // tokens per 1 unit
+  label     String  // Display-friendly name
+  isActive  Boolean @default(true)
+}
+
+model RechargeOrder {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId      String   @unique // Razorpay/Cashfree/manual order ID
+  amount       Float    // ₹ amount paid
+  tokensToAdd  Int      // Tokens to credit on success
+  status       String   @default("PENDING") // PENDING | SUCCESS | FAILED
+  gateway      String   @default("MANUAL")  // MANUAL | RAZORPAY | CASHFREE
+  gatewayData  Json?    // Raw gateway response
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ─── MEDIA / STORAGE SYSTEM ───────────────────────────────────────────────────
+
+model MediaFile {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fileName    String   // Original file name (e.g. banner.jpg)
+  storedName  String   // UUID-based stored name (e.g. abc123.jpg)
+  mimeType    String   // image/jpeg, video/mp4, application/pdf, audio/mpeg
+  size        Int      // File size in bytes
+  url         String   // Public access URL path
+  folder      String   @default("general") // general | templates | chatbot | chat | invoices
+  createdAt   DateTime @default(now())
+}
+
+model StorageUsage {
+  id         String  @id @default(uuid())
+  userId     String  @unique
+  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usedBytes  Int     @default(0)
+  quotaBytes Int     @default(1073741824) // 1 GB default (Starter plan)
+}
+
+model Contact {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone     String   // E.164 format (e.g. +8801700000000)
+  name      String?
+  email     String?
+  tags      String[] // Prisma supports String[] for Postgres
+  groups    ContactGroup[]
+  labels    ContactLabel[]
+  notes       String?
+  assignedTo  String?          // Agent userId
+  channel     String   @default("WHATSAPP") // WHATSAPP | WEB
+  isBotPaused Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, phone])
+}
+
+model Message {
+  id           String          @id @default(uuid())
+  userId       String
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId    String?
+  from         String          // Sender phone number
+  to           String          // Receiver phone number
+  body         String          // Message text or media URL
+  direction    String          // INCOMING, OUTGOING
+  type         String          @default("TEXT") // TEXT, IMAGE, DOCUMENT, VIDEO
+  status       String          @default("SENT") // SENT, DELIVERED, READ, FAILED
+  channel      String          @default("WHATSAPP") // WHATSAPP or WEB
+  whatsappId   String?         // ID returned by WhatsApp
+  createdAt    DateTime        @default(now())
+}
+
+model ChatbotFlow {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  triggerKeywords String[] // Keywords that trigger this bot
+  flowJson        Json     // Visual flow builder nodes & edges JSON
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  telegramBots    TelegramBot[]
+  whatsappUsers   User[]   @relation("WhatsappFlow")
+}
+
+model Campaign {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  status          String    @default("DRAFT") // DRAFT, SCHEDULED, PROCESSING, COMPLETED, PAUSED, FAILED
+  
+  // Message Config
+  messageBody     String    @db.Text
+  mediaUrl        String?
+  mediaType       String?   // IMAGE, VIDEO, AUDIO, DOCUMENT
+  
+  // Targeting
+  targetGroupIds  String[]  // Array of Group IDs
+  targetLabelIds  String[]  // Array of Label IDs
+  
+  // Schedule
+  scheduledAt     DateTime?
+  
+  // Stats
+  totalTarget     Int       @default(0)
+  totalSent       Int       @default(0)
+  totalFailed     Int       @default(0)
+  totalRead       Int       @default(0)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  logs            CampaignLog[]
+}
+
+model CampaignLog {
+  id              String    @id @default(uuid())
+  campaignId      String
+  campaign        Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  phone           String
+  status          String    @default("PENDING") // PENDING, SENT, FAILED, READ
+  errorMessage    String?
+  sentAt          DateTime?
+}
+
+model ConversationState {
+  id            String   @id @default(uuid())
+  userId        String
+  phone         String   // Customer identifier (phone, telegram chat_id, or web session id)
+  channel       String   @default("WHATSAPP") // WHATSAPP | TELEGRAM | WEB
+  currentNodeId String
+  updatedAt     DateTime @updatedAt
+
+  @@unique([phone, channel])
+}
+
+model BillingTransaction {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount      Float
+  currency    String   @default("BDT")
+  type        String   // RECHARGE, SUBSCRIPTION
+  status      String   @default("PENDING") // PENDING, SUCCESS, FAILED
+  gatewayData Json?    // Response from payment gateway
+  createdAt   DateTime @default(now())
+}
+
+model AiUsageLog {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  promptTokens Int
+  replyTokens  Int
+  cost         Float    // Deducted from aiCreditsBalance
+  feature      String   @default("AUTO_REPLY") // Auto reply, Draft reply, etc.
+  createdAt    DateTime @default(now())
+}
+
+model ShortLink {
+  id           String           @id @default(uuid())
+  userId       String
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  originalUrl  String           // E.g. https://google.com
+  shortCode    String           @unique // E.g. wa123
+  campaignName String?          // E.g. "Eid Promo 2026"
+  clicks       Int              @default(0)
+  createdAt    DateTime         @default(now())
+  analytics    ClickAnalytics[]
+}
+
+model ClickAnalytics {
+  id           String     @id @default(uuid())
+  shortLinkId  String
+  shortLink    ShortLink  @relation(fields: [shortLinkId], references: [id], onDelete: Cascade)
+  ipAddress    String?
+  userAgent    String?
+  deviceType   String?    // mobile, desktop, tablet
+  country      String?
+  clickedAt    DateTime   @default(now())
+}
+
+model ContactGroup {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  color     String?   // Optional hex color
+  contacts  Contact[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([userId, name])
+}
+
+model ContactLabel {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  color     String?   // Optional hex color
+  contacts  Contact[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([userId, name])
+}
+
+// ─── TELEGRAM ─────────────────────────────────────────────────────────────────
+
+model TelegramBot {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  token       String   // Bot token from @BotFather
+  username    String?  // @username
+  webhookUrl  String?
+  isActive    Boolean  @default(true)
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Chatbot & AI Settings for Telegram Bot
+  chatbotFlowId   String?
+  chatbotFlow     ChatbotFlow?      @relation(fields: [chatbotFlowId], references: [id], onDelete: SetNull)
+  aiActive        Boolean           @default(false)
+  aiResponseLimit Int               @default(1000)
+  aiResponseCount Int               @default(0)
+}
+
+model TelegramNote {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  content   String   @db.Text
+  color     String   @default("#3B82F6")
+  pinned    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TelegramContact {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  botId      String
+  chatId     String           // Telegram chat_id
+  username   String?
+  firstName  String?
+  lastName   String?
+  isBlocked  Boolean  @default(false)
+  assignedTo  String?          // Agent userId
+  label       String?
+  notes       String?  @db.Text
+  isBotPaused Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([botId, chatId])
+}
+
+model KnowledgeBase {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // FAQ | URL | FILE
+  title     String
+  content   String   @db.Text
+  metadata  String?  // JSON string storing file size, scraped URL domain, etc.
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AiLog {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel      String   // WHATSAPP | TELEGRAM | WEB
+  prompt       String   @db.Text
+  response     String   @db.Text
+  tokensUsed   Int      @default(0)
+  status       String   @default("SUCCESS") // SUCCESS | ERROR
+  createdAt    DateTime @default(now())
+}
