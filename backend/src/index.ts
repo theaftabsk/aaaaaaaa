@@ -1,8 +1,8 @@
+import 'dotenv/config';
 import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
 import whatsappRoutes from './routes/whatsappRoutes';
 import dashboardRoutes from './routes/dashboardRoutes';
@@ -21,8 +21,6 @@ import { seedPricingRules } from './services/walletService';
 import './services/queue'; // Initialize the BullMQ Worker
 import prisma from './lib/prisma';
 import { processIncomingMessage } from './services/flowEngine';
-
-dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
