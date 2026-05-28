@@ -21,7 +21,8 @@ export default function TemplatesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isFetched, setIsFetched] = useState(false);
 
   // Form State
   const [newTemplateName, setNewTemplateName] = useState('');
@@ -29,58 +30,15 @@ export default function TemplatesPage() {
   const [newTemplateLang, setNewTemplateLang] = useState('en');
   const [newTemplateBody, setNewTemplateBody] = useState('');
 
-  // Initial Mock Templates
-  const [templates, setTemplates] = useState<Template[]>([
-    {
-      id: '1',
-      name: 'eid_mubarak_marketing',
-      category: 'MARKETING',
-      language: 'bn (Bengali)',
-      status: 'APPROVED',
-      body: 'ঈদ মোবারক {{1}}! ✨ আমাদের বিশেষ ঈদ অফারে আপনার জন্য রয়েছে ২৫% ডিসকাউন্ট। এখনই অর্ডার করুন: {{2}}',
-      lastUsed: '2 hours ago'
-    },
-    {
-      id: '2',
-      name: 'order_confirmation_utility',
-      category: 'UTILITY',
-      language: 'en (English)',
-      status: 'APPROVED',
-      body: 'Hello {{1}}, your order {{2}} has been confirmed! 📦 We will notify you once it ships. Thank you for shopping with us!',
-      lastUsed: 'Yesterday'
-    },
-    {
-      id: '3',
-      name: 'otp_verification_auth',
-      category: 'AUTHENTICATION',
-      language: 'en (English)',
-      status: 'APPROVED',
-      body: 'Your Vexo verification OTP is {{1}}. This code is valid for 5 minutes. Please do not share it with anyone.',
-      lastUsed: '10 mins ago'
-    },
-    {
-      id: '4',
-      name: 'black_friday_promo',
-      category: 'MARKETING',
-      language: 'en (English)',
-      status: 'PENDING',
-      body: 'Hey {{1}}! Early access to Black Friday deals is live now. Get up to 60% OFF on premium modules: {{2}}',
-    },
-    {
-      id: '5',
-      name: 'payment_reminder_utility',
-      category: 'UTILITY',
-      language: 'en (English)',
-      status: 'REJECTED',
-      body: 'Urgent: Payment of {{1}} is overdue. Click here to pay immediately to avoid service disconnection: {{2}}',
-    }
-  ]);
+  // Start with empty — only real Meta templates will populate this
+  const [templates, setTemplates] = useState<Template[]>([]);
 
   const fetchTemplates = async () => {
     setIsLoading(true);
     const token = localStorage.getItem('token');
     if (!token) {
       setIsLoading(false);
+      setIsFetched(true);
       return;
     }
     try {
@@ -89,25 +47,27 @@ export default function TemplatesPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        if (data && data.length > 0) {
-          const mapped = data.map((t: any) => {
-            const bodyComponent = t.components?.find((c: any) => c.type === 'BODY');
-            return {
-              id: t.id,
-              name: t.name,
-              category: t.category || 'MARKETING',
-              language: t.language || 'en_US',
-              status: t.status || 'APPROVED',
-              body: bodyComponent?.text || 'Template message',
-            };
-          });
-          setTemplates(mapped);
-        }
+        const mapped = (data || []).map((t: any) => {
+          const bodyComponent = t.components?.find((c: any) => c.type === 'BODY');
+          return {
+            id: t.id,
+            name: t.name,
+            category: t.category || 'MARKETING',
+            language: t.language || 'en_US',
+            status: t.status || 'APPROVED',
+            body: bodyComponent?.text || 'Template message',
+          };
+        });
+        setTemplates(mapped);
+      } else {
+        setTemplates([]);
       }
     } catch (err) {
       console.error('Error fetching Meta templates:', err);
+      setTemplates([]);
     } finally {
       setIsLoading(false);
+      setIsFetched(true);
     }
   };
 
@@ -283,13 +243,31 @@ export default function TemplatesPage() {
 
       {/* Template Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredTemplates.length === 0 ? (
+        {isLoading ? (
+          <div className="col-span-full bg-white rounded-3xl border border-slate-200 py-20 text-center shadow-sm">
+            <Loader2 className="w-8 h-8 text-emerald-500 animate-spin mx-auto mb-4" />
+            <h3 className="text-base font-bold text-slate-700">Syncing with Meta...</h3>
+            <p className="text-sm text-slate-400 mt-1">Fetching your approved WhatsApp templates</p>
+          </div>
+        ) : filteredTemplates.length === 0 ? (
           <div className="col-span-full bg-white rounded-3xl border border-slate-200 py-16 text-center shadow-sm">
             <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <FileText className="w-7 h-7 text-slate-400" />
             </div>
             <h3 className="text-lg font-bold text-slate-900">No templates found</h3>
-            <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">Try adjusting your filters or search keywords to find your templates.</p>
+            <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">
+              {searchQuery || activeCategory !== 'ALL'
+                ? 'Try adjusting your filters or search keywords.'
+                : 'No approved templates found in your Meta WABA. Click "Sync with Meta" to refresh.'}
+            </p>
+            {!searchQuery && activeCategory === 'ALL' && (
+              <button
+                onClick={fetchTemplates}
+                className="mt-5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm px-5 py-2.5 rounded-2xl transition-all"
+              >
+                Sync with Meta
+              </button>
+            )}
           </div>
         ) : (
           filteredTemplates.map((template) => (
