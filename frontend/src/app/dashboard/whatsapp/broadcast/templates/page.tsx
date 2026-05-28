@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Plus, Search, CheckCircle2, Clock, XCircle, FileText, 
-  Trash2, Globe, Sparkles, MessageSquare, Copy, Eye, X, ArrowLeft
+  Trash2, Globe, Sparkles, MessageSquare, Copy, Eye, X, ArrowLeft, Loader2
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -21,6 +21,7 @@ export default function TemplatesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Form State
   const [newTemplateName, setNewTemplateName] = useState('');
@@ -74,6 +75,46 @@ export default function TemplatesPage() {
       body: 'Urgent: Payment of {{1}} is overdue. Click here to pay immediately to avoid service disconnection: {{2}}',
     }
   ]);
+
+  const fetchTemplates = async () => {
+    setIsLoading(true);
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setIsLoading(false);
+      return;
+    }
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/whatsapp/meta/templates`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.length > 0) {
+          const mapped = data.map((t: any) => {
+            const bodyComponent = t.components?.find((c: any) => c.type === 'BODY');
+            return {
+              id: t.id,
+              name: t.name,
+              category: t.category || 'MARKETING',
+              language: t.language || 'en_US',
+              status: t.status || 'APPROVED',
+              body: bodyComponent?.text || 'Template message',
+            };
+          });
+          setTemplates(mapped);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching Meta templates:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Fetch templates on initial load
+  useEffect(() => {
+    fetchTemplates();
+  }, []);
 
   const getStatusBadge = (status: Template['status']) => {
     switch (status) {
@@ -163,12 +204,28 @@ export default function TemplatesPage() {
           </h1>
           <p className="text-sm text-slate-500">Create, test, and sync official WhatsApp templates for your marketing broadcasts</p>
         </div>
-        <button 
-          onClick={() => setIsModalOpen(true)}
-          className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm px-5 py-3.5 rounded-2xl flex items-center gap-2 shadow-lg transition-all active:scale-95"
-        >
-          <Plus className="w-4 h-4" /> Create Template
-        </button>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <button 
+            onClick={fetchTemplates}
+            disabled={isLoading}
+            className="border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-sm px-5 py-3.5 rounded-2xl flex items-center gap-2 shadow-sm transition-all active:scale-95 disabled:opacity-50"
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Syncing...
+              </>
+            ) : (
+              'Sync with Meta'
+            )}
+          </button>
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm px-5 py-3.5 rounded-2xl flex items-center gap-2 shadow-lg transition-all active:scale-95"
+          >
+            <Plus className="w-4 h-4" /> Create Template
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}
