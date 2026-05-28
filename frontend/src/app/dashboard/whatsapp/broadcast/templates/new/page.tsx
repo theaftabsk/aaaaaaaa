@@ -343,7 +343,7 @@ function TemplateBuilderComponent() {
           return {
             type: 'PHONE_NUMBER',
             text: btn.text.trim(),
-            phone_number: (btn.phone_number || '').trim().replace(/\s+/g, '')
+            phone_number: (btn.phone_number || '').trim().replace(/[^0-9]/g, '')
           };
         } else {
           // URL
@@ -757,6 +757,7 @@ function TemplateBuilderComponent() {
                               placeholder="e.g. +15551234567"
                               className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:border-emerald-500 outline-none"
                             />
+                            <p className="text-[9px] text-slate-400 mt-0.5">Must include country code (digits only, e.g. 15551234567, no + or - symbols).</p>
                           </div>
                         )}
 
