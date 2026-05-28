@@ -221,49 +221,17 @@ export async function getMetaTemplates(req: AuthenticatedRequest, res: Response)
     });
 
     if (!user || !user.apiAccessToken || !user.apiWabaId) {
-      return res.status(400).json({ error: 'Meta Cloud API is not connected.' });
+      return res.status(400).json({ error: 'Meta Cloud API is not connected. Please connect your WhatsApp account first.' });
     }
 
     const token = decrypt(user.apiAccessToken);
-    
-    // Sandbox bypass
-    if (token.startsWith('EAAG_fb_oauth_token_')) {
-      return res.json([
-        {
-          id: 'temp_1',
-          name: 'eid_mubarak_marketing',
-          status: 'APPROVED',
-          category: 'MARKETING',
-          language: 'bn',
-          components: [
-            { type: 'BODY', text: 'ঈদ মোবারক {{1}}! ✨ আমাদের বিশেষ ঈদ অফারে আপনার জন্য রয়েছে ২৫% ডিসকাউন্ট। এখনই অর্ডার করুন: {{2}}' }
-          ]
-        },
-        {
-          id: 'temp_2',
-          name: 'order_confirmation_utility',
-          status: 'APPROVED',
-          category: 'UTILITY',
-          language: 'en_US',
-          components: [
-            { type: 'BODY', text: 'Hello {{1}}, your order has been confirmed! 📦 We will notify you once it ships. Thank you for shopping with us!' }
-          ]
-        },
-        {
-          id: 'temp_3',
-          name: '3p_direct_integration_test_template',
-          status: 'APPROVED',
-          category: 'UTILITY',
-          language: 'en_US',
-          components: [
-            { type: 'BODY', text: 'Hello! This is a test message.' }
-          ]
-        }
-      ]);
-    }
 
-    // Fetch from Meta WABA
-    const responseData: any = await fetchMetaAPI(`${user.apiWabaId}/message_templates?fields=id,name,status,category,language,components`, token);
+    // Fetch real approved templates from Meta WABA
+    const responseData: any = await fetchMetaAPI(
+      `${user.apiWabaId}/message_templates?fields=id,name,status,category,language,components&limit=100`,
+      token
+    );
+
     const templates = (responseData.data || []).map((temp: any) => ({
       id: temp.id,
       name: temp.name,

@@ -81,30 +81,6 @@ export default function NewCampaignBuilder() {
     return () => document.removeEventListener('click', handleOutsideClick);
   }, []);
 
-  // Available Templates (from templates hub)
-  const templates: Template[] = [
-    {
-      id: '1',
-      name: 'eid_mubarak_marketing',
-      body: 'ঈদ মোবারক {{name}}! ✨ আমাদের বিশেষ ঈদ অফারে আপনার জন্য রয়েছে ২৫% ডিসকাউন্ট। এখনই অর্ডার করুন: {{company_link}}'
-    },
-    {
-      id: '2',
-      name: 'order_confirmation_utility',
-      body: 'Hello {{name}}, your order has been confirmed! 📦 We will notify you once it ships. Thank you for shopping with us!'
-    },
-    {
-      id: '3',
-      name: 'otp_verification_auth',
-      body: 'Your Vexo verification OTP is 5849. This code is valid for 5 minutes. Please do not share it with anyone.'
-    },
-    {
-      id: '4',
-      name: 'black_friday_promo',
-      body: 'Hey {{name}}! Early access to Black Friday deals is live now. Get up to 60% OFF: {{company_link}}'
-    }
-  ];
-
   // Fetch initial data
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -489,15 +465,15 @@ export default function NewCampaignBuilder() {
                       <option value="">Please select a project first...</option>
                     ) : (
                       <>
-                        <option value="">Please select a template...</option>
-                        {[...metaTemplates, ...templates].map(t => {
-                          const isMeta = metaTemplates.some(mt => mt.id === t.id);
-                          return (
-                            <option key={t.id} value={t.id}>
-                              {t.name} {isMeta ? '🌐 (Meta Cloud Template)' : '📝 (Vexo Mock Template)'}
-                            </option>
-                          );
-                        })}
+                        <option value="">{metaTemplates.length === 0 ? 'Loading templates from Meta...' : 'Please select a template...'}</option>
+                        {metaTemplates.map(t => (
+                          <option key={t.id} value={t.id}>
+                            {t.name} 🌐
+                          </option>
+                        ))}
+                        {metaTemplates.length === 0 && (
+                          <option value="" disabled>No Meta templates found. Go to Templates page to sync.</option>
+                        )}
                       </>
                     )}
                   </select>
