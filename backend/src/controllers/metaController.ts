@@ -247,3 +247,162 @@ export async function getMetaTemplates(req: AuthenticatedRequest, res: Response)
     res.status(500).json({ error: error.message || 'Failed to retrieve WhatsApp Message Templates from Meta.' });
   }
 }
+
+/**
+ * Create a new WhatsApp Message Template on Meta
+ * POST /api/whatsapp/meta/templates
+ */
+export async function createMetaTemplate(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+  const { name, category, language, components } = req.body;
+  if (!name || !category || !language || !components) {
+    return res.status(400).json({ error: 'name, category, language, and components are required.' });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || !user.apiAccessToken || !user.apiWabaId) {
+      return res.status(400).json({ error: 'Meta Cloud API is not connected. Please connect your WhatsApp account first.' });
+    }
+
+    const token = decrypt(user.apiAccessToken);
+
+    // Call Meta API to create template
+    const url = `https://graph.facebook.com/v19.0/${user.apiWabaId}/message_templates`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name,
+        category,
+        language,
+        components
+      })
+    });
+
+    const responseData: any = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(responseData.error?.message || 'Failed to create template on Meta.');
+    }
+
+    res.json({
+      success: true,
+      message: 'Template created successfully.',
+      data: responseData
+    });
+  } catch (error: any) {
+    console.error('Create Meta template error:', error);
+    res.status(500).json({ error: error.message || 'Failed to create template on Meta.' });
+  }
+}
+
+/**
+ * Edit an existing WhatsApp Message Template on Meta
+ * POST /api/whatsapp/meta/templates/:id
+ */
+export async function editMetaTemplate(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+  const { id } = req.params;
+  const { components } = req.body;
+  if (!id || !components) {
+    return res.status(400).json({ error: 'id and components are required.' });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || !user.apiAccessToken) {
+      return res.status(400).json({ error: 'Meta Cloud API is not connected. Please connect your WhatsApp account first.' });
+    }
+
+    const token = decrypt(user.apiAccessToken);
+
+    // Call Meta API to edit template (POST to the template's ID)
+    const url = `https://graph.facebook.com/v19.0/${id}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        components
+      })
+    });
+
+    const responseData: any = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(responseData.error?.message || 'Failed to edit template on Meta.');
+    }
+
+    res.json({
+      success: true,
+      message: 'Template edited successfully.',
+      data: responseData
+    });
+  } catch (error: any) {
+    console.error('Edit Meta template error:', error);
+    res.status(500).json({ error: error.message || 'Failed to edit template on Meta.' });
+  }
+}
+
+/**
+ * Delete a WhatsApp Message Template from Meta by Name
+ * DELETE /api/whatsapp/meta/templates/:name
+ */
+export async function deleteMetaTemplate(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+  const { name } = req.params;
+  if (!name) {
+    return res.status(400).json({ error: 'Template name is required.' });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || !user.apiAccessToken || !user.apiWabaId) {
+      return res.status(400).json({ error: 'Meta Cloud API is not connected. Please connect your WhatsApp account first.' });
+    }
+
+    const token = decrypt(user.apiAccessToken);
+
+    // Call Meta API to delete template (DELETE to {wabaId}/message_templates?name={name})
+    const url = `https://graph.facebook.com/v19.0/${user.apiWabaId}/message_templates?name=${encodeURIComponent(name)}`;
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+
+    const responseData: any = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(responseData.error?.message || 'Failed to delete template from Meta.');
+    }
+
+    res.json({
+      success: true,
+      message: 'Template deleted successfully.',
+      data: responseData
+    });
+  } catch (error: any) {
+    console.error('Delete Meta template error:', error);
+    res.status(500).json({ error: error.message || 'Failed to delete template from Meta.' });
+  }
+}

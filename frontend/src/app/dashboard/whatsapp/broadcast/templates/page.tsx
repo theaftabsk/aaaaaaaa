@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { 
   Plus, Search, CheckCircle2, Clock, XCircle, FileText, 
-  Trash2, Globe, Sparkles, MessageSquare, Copy, Eye, X, ArrowLeft, Loader2
+  Trash2, Globe, Sparkles, MessageSquare, Copy, Eye, X, ArrowLeft, Loader2, Pencil
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -20,15 +20,8 @@ interface Template {
 export default function TemplatesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('ALL');
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isFetched, setIsFetched] = useState(false);
-
-  // Form State
-  const [newTemplateName, setNewTemplateName] = useState('');
-  const [newTemplateCategory, setNewTemplateCategory] = useState<'MARKETING' | 'UTILITY' | 'AUTHENTICATION'>('MARKETING');
-  const [newTemplateLang, setNewTemplateLang] = useState('en');
-  const [newTemplateBody, setNewTemplateBody] = useState('');
 
   // Start with empty — only real Meta templates will populate this
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -107,34 +100,29 @@ export default function TemplatesPage() {
     }
   };
 
-  const handleCreateTemplate = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTemplateName || !newTemplateBody) return;
+  const handleDeleteTemplate = async (name: string) => {
+    if (!confirm(`Are you sure you want to delete the template "${name}" from Meta? This action cannot be undone.`)) {
+      return;
+    }
+    const token = localStorage.getItem('token');
+    if (!token) return;
 
-    // Clean name to be lower_snake_case for WhatsApp template compliance
-    const formattedName = newTemplateName
-      .toLowerCase()
-      .trim()
-      .replace(/\s+/g, '_')
-      .replace(/[^a-z0-9_]/g, '');
-
-    const newTpl: Template = {
-      id: Date.now().toString(),
-      name: formattedName,
-      category: newTemplateCategory,
-      language: newTemplateLang === 'en' ? 'en (English)' : 'bn (Bengali)',
-      status: 'PENDING',
-      body: newTemplateBody,
-    };
-
-    setTemplates([newTpl, ...templates]);
-    setNewTemplateName('');
-    setNewTemplateBody('');
-    setIsModalOpen(false);
-  };
-
-  const handleDeleteTemplate = (id: string) => {
-    setTemplates(templates.filter(tpl => tpl.id !== id));
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/whatsapp/meta/templates/${name}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        alert('Template deleted successfully from Meta.');
+        fetchTemplates();
+      } else {
+        const data = await res.json();
+        alert(`Failed to delete template: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err: any) {
+      console.error('Error deleting template:', err);
+      alert(`Error deleting template: ${err.message}`);
+    }
   };
 
   const filteredTemplates = templates.filter(tpl => {
@@ -179,12 +167,12 @@ export default function TemplatesPage() {
               'Sync with Meta'
             )}
           </button>
-          <button 
-            onClick={() => setIsModalOpen(true)}
+          <Link 
+            href="/dashboard/whatsapp/broadcast/templates/new"
             className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm px-5 py-3.5 rounded-2xl flex items-center gap-2 shadow-lg transition-all active:scale-95"
           >
             <Plus className="w-4 h-4" /> Create Template
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -317,10 +305,17 @@ export default function TemplatesPage() {
                   >
                     <Copy className="w-4 h-4" />
                   </button>
+                  <Link 
+                    href={`/dashboard/whatsapp/broadcast/templates/new?id=${template.id}`}
+                    className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded-xl transition-colors" 
+                    title="Edit Template"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </Link>
                   <button 
-                    onClick={() => handleDeleteTemplate(template.id)}
+                    onClick={() => handleDeleteTemplate(template.name)}
                     className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors" 
-                    title="Delete"
+                    title="Delete Template"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -339,104 +334,6 @@ export default function TemplatesPage() {
           ))
         )}
       </div>
-
-      {/* Create Template Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-xl rounded-3xl border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            
-            {/* Modal Header */}
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-              <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
-                <Plus className="w-5 h-5 text-emerald-500"/> Create New Template
-              </h2>
-              <button 
-                onClick={() => setIsModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Modal Form */}
-            <form onSubmit={handleCreateTemplate} className="p-6 space-y-4">
-              
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Template Name *</label>
-                <input 
-                  type="text" 
-                  required
-                  placeholder="e.g. order_shipping_notification"
-                  value={newTemplateName}
-                  onChange={(e) => setNewTemplateName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:border-emerald-500 outline-none transition-colors" 
-                />
-                <p className="text-[10px] text-slate-400">Use lower_snake_case containing letters, numbers, and underscores only.</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Category</label>
-                  <select 
-                    value={newTemplateCategory}
-                    onChange={(e) => setNewTemplateCategory(e.target.value as any)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:border-emerald-500 outline-none cursor-pointer"
-                  >
-                    <option value="MARKETING">Marketing</option>
-                    <option value="UTILITY">Utility</option>
-                    <option value="AUTHENTICATION">Authentication</option>
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Language</label>
-                  <select 
-                    value={newTemplateLang}
-                    onChange={(e) => setNewTemplateLang(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:border-emerald-500 outline-none cursor-pointer"
-                  >
-                    <option value="en">English (en)</option>
-                    <option value="bn">Bengali (bn)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-center">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Template Body Text *</label>
-                  <span className="text-[10px] text-slate-400">Use placeholders like `{"{{1}}"}`, `{"{{2}}"}`</span>
-                </div>
-                <textarea 
-                  required
-                  rows={4}
-                  placeholder="e.g. Hello {{1}}, your package with tracking code {{2}} has been shipped! Link: {{3}}"
-                  value={newTemplateBody}
-                  onChange={(e) => setNewTemplateBody(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm focus:border-emerald-500 outline-none resize-none transition-colors"
-                ></textarea>
-              </div>
-
-              {/* Form Actions */}
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
-                <button 
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-5 py-2.5 text-sm font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-2xl transition-colors"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit"
-                  className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm px-6 py-2.5 rounded-2xl shadow-lg shadow-emerald-500/10 transition-all active:scale-95"
-                >
-                  Submit for Approval
-                </button>
-              </div>
-
-            </form>
-
-          </div>
-        </div>
-      )}
 
     </div>
   );

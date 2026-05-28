@@ -1,6 +1,15 @@
 import { Router } from 'express';
 import { sendManualMessage, getSessions } from '../controllers/whatsappController';
-import { handleMetaOauthCallback, getMetaBusinesses, getMetaPhones, verifyAndSaveMetaCredentials, getMetaTemplates } from '../controllers/metaController';
+import { 
+  handleMetaOauthCallback, 
+  getMetaBusinesses, 
+  getMetaPhones, 
+  verifyAndSaveMetaCredentials, 
+  getMetaTemplates,
+  createMetaTemplate,
+  editMetaTemplate,
+  deleteMetaTemplate
+} from '../controllers/metaController';
 import { authMiddleware } from '../middleware/authMiddleware';
 
 const router = Router();
@@ -17,5 +26,8 @@ router.get('/meta/businesses', getMetaBusinesses);
 router.get('/meta/phones', getMetaPhones);
 router.post('/meta/verify', verifyAndSaveMetaCredentials);
 router.get('/meta/templates', getMetaTemplates);
+router.post('/meta/templates', createMetaTemplate);
+router.post('/meta/templates/:id', editMetaTemplate);
+router.delete('/meta/templates/:name', deleteMetaTemplate);
 
 export default router;
