@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   GraduationCap, Coins, ToggleLeft, ToggleRight, Upload, Globe, 
@@ -53,7 +53,7 @@ interface Transaction {
   createdAt: string;
 }
 
-export default function AiBotHubPage() {
+function AiBotHubInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
@@ -1328,5 +1328,20 @@ export default function AiBotHubPage() {
       )}
 
     </div>
+  );
+}
+
+export default function AiBotHubPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-[calc(100vh-14rem)] bg-white border border-slate-200 shadow-sm rounded-3xl items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <span className="text-slate-500 text-xs font-bold">Loading AI Hub...</span>
+        </div>
+      </div>
+    }>
+      <AiBotHubInner />
+    </Suspense>
   );
 }

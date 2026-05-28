@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import io from 'socket.io-client';
 import { Send, User, Bot, Loader2, Sparkles } from 'lucide-react';
@@ -12,7 +12,7 @@ interface Message {
   createdAt: Date;
 }
 
-export default function WidgetPage() {
+function WidgetInner() {
   const searchParams = useSearchParams();
   const widgetId = searchParams.get('id');
   
@@ -190,5 +190,18 @@ export default function WidgetPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function WidgetPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-screen items-center justify-center bg-slate-50 text-slate-500 text-sm p-4 text-center">
+        <Loader2 className="w-6 h-6 animate-spin text-emerald-500 mr-2" />
+        Loading Live Chat...
+      </div>
+    }>
+      <WidgetInner />
+    </Suspense>
   );
 }
