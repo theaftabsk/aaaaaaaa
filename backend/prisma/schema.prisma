@@ -239,6 +239,8 @@ model Campaign {
   messageBody     String    @db.Text
   mediaUrl        String?
   mediaType       String?   // IMAGE, VIDEO, AUDIO, DOCUMENT
+  templateName    String?
+  templateLanguage String?
   
   // Targeting
   targetGroupIds  String[]  // Array of Group IDs

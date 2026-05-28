@@ -9,7 +9,43 @@ interface CampaignJobData {
   sessionId: string;
   userId: string;
   recipient: string;
+  recipientName?: string;
   text: string;
+  templateName?: string;
+  templateLanguage?: string;
+}
+
+function getTemplateParameters(templateName: string, recipientName: string): any[] {
+  const name = recipientName || 'Customer';
+  switch (templateName) {
+    case '3p_direct_integration_test_template':
+      return [];
+    case 'eid_mubarak_marketing':
+      return [
+        { type: 'text', text: name },
+        { type: 'text', text: 'vexo.link/deal' }
+      ];
+    case 'order_confirmation_utility':
+      return [
+        { type: 'text', text: name }
+      ];
+    case 'otp_verification_auth':
+      return [
+        { type: 'text', text: '5849' }
+      ];
+    case 'black_friday_promo':
+      return [
+        { type: 'text', text: name },
+        { type: 'text', text: 'vexo.link/deal' }
+      ];
+    default:
+      if (templateName.toLowerCase().includes('test')) {
+        return [];
+      }
+      return [
+        { type: 'text', text: name }
+      ];
+  }
 }
 
 // 1. Initialize the Broadcast Queue
@@ -28,7 +64,7 @@ export const broadcastQueue = new Queue<CampaignJobData>('broadcast-queue', {
 export const broadcastWorker = new Worker<CampaignJobData>(
   'broadcast-queue',
   async (job: Job<CampaignJobData>) => {
-    const { broadcastId, sessionId, userId, recipient, text } = job.data;
+    const { broadcastId, sessionId, userId, recipient, recipientName, text, templateName, templateLanguage } = job.data;
 
     console.log(`[Queue Worker] Processing job ${job.id} for broadcast ${broadcastId} to ${recipient}`);
 
@@ -42,6 +78,35 @@ export const broadcastWorker = new Worker<CampaignJobData>(
 
       const decryptedToken = decrypt(user.apiAccessToken);
       const url = `https://graph.facebook.com/v21.0/${user.apiPhoneNumberId}/messages`;
+
+      let requestBody: any;
+      if (templateName) {
+        const params = getTemplateParameters(templateName, recipientName || '');
+        requestBody = {
+          messaging_product: 'whatsapp',
+          to: recipient.replace(/\D/g, ''),
+          type: 'template',
+          template: {
+            name: templateName,
+            language: { code: templateLanguage || 'en_US' }
+          }
+        };
+        if (params.length > 0) {
+          requestBody.template.components = [
+            {
+              type: 'body',
+              parameters: params
+            }
+          ];
+        }
+      } else {
+        requestBody = {
+          messaging_product: 'whatsapp',
+          to: recipient.replace(/\D/g, ''),
+          type: 'text',
+          text: { body: text },
+        };
+      }
       
       const res = await fetch(url, {
         method: 'POST',
@@ -49,12 +114,7 @@ export const broadcastWorker = new Worker<CampaignJobData>(
           Authorization: `Bearer ${decryptedToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: recipient.replace(/\D/g, ''),
-          type: 'text',
-          text: { body: text },
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!res.ok) {
@@ -64,6 +124,19 @@ export const broadcastWorker = new Worker<CampaignJobData>(
 
       const data = (await res.json()) as any;
       const whatsappId = data.messages?.[0]?.id || null;
+
+      // Ensure contact is saved and isBotPaused is explicitly set to false
+      await prisma.contact.upsert({
+        where: { userId_phone: { userId, phone: recipient } },
+        update: { isBotPaused: false },
+        create: {
+          userId,
+          phone: recipient,
+          name: recipientName || `WhatsApp Lead (${recipient.slice(-4)})`,
+          channel: 'WHATSAPP',
+          isBotPaused: false
+        }
+      });
 
       // Log success in DB
       await prisma.message.create({

@@ -91,13 +91,13 @@ export default function WhatsAppConnection() {
   const [activeView, setActiveView] = useState<'LIST' | 'DETAILS'>('LIST');
 
   // Meta Health States
-  const [metaQuality, setMetaQuality] = useState('GREEN');
-  const [metaLimit, setMetaLimit] = useState('TIER_250');
-  const [metaPhoneStatus, setMetaPhoneStatus] = useState('Verified');
+  const [metaQuality, setMetaQuality] = useState('-');
+  const [metaLimit, setMetaLimit] = useState('-');
+  const [metaPhoneStatus, setMetaPhoneStatus] = useState('-');
   const [metaConnection, setMetaConnection] = useState('Connected');
-  const [metaVerification, setMetaVerification] = useState('verified');
-  const [metaAccountStatus, setMetaAccountStatus] = useState('APPROVED');
-  const [metaPayment, setMetaPayment] = useState('Good');
+  const [metaVerification, setMetaVerification] = useState('-');
+  const [metaAccountStatus, setMetaAccountStatus] = useState('-');
+  const [metaPayment, setMetaPayment] = useState('-');
   const [metaWebhook, setMetaWebhook] = useState('Active');
 
   const syncWithMetaAPI = async (token: string, phoneId: string, wabaId: string) => {
@@ -111,7 +111,7 @@ export default function WhatsAppConnection() {
     setSyncingMeta(true);
     try {
       // 1. Fetch phone number details
-      const phoneRes = await fetch(`https://graph.facebook.com/v19.0/${phoneId}?fields=quality_rating,status,account_status,display_phone_number,name_status,verified_name`, {
+      const phoneRes = await fetch(`https://graph.facebook.com/v19.0/${phoneId}?fields=quality_rating,status,account_status,display_phone_number,name_status,verified_name,messaging_limit_tier`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
@@ -125,6 +125,7 @@ export default function WhatsAppConnection() {
         setMetaQuality(phoneData.quality_rating || 'UNKNOWN');
         setMetaPhoneStatus(phoneData.status || 'Pending');
         setMetaAccountStatus(phoneData.account_status || 'APPROVED');
+        setMetaLimit(phoneData.messaging_limit_tier || '-');
       }
 
       // 2. Fetch business profile details

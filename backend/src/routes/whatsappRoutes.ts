@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { sendManualMessage, getSessions } from '../controllers/whatsappController';
-import { handleMetaOauthCallback, getMetaBusinesses, getMetaPhones, verifyAndSaveMetaCredentials } from '../controllers/metaController';
+import { handleMetaOauthCallback, getMetaBusinesses, getMetaPhones, verifyAndSaveMetaCredentials, getMetaTemplates } from '../controllers/metaController';
 import { authMiddleware } from '../middleware/authMiddleware';
 
 const router = Router();
@@ -16,5 +16,6 @@ router.post('/meta/oauth/callback', handleMetaOauthCallback);
 router.get('/meta/businesses', getMetaBusinesses);
 router.get('/meta/phones', getMetaPhones);
 router.post('/meta/verify', verifyAndSaveMetaCredentials);
+router.get('/meta/templates', getMetaTemplates);
 
 export default router;

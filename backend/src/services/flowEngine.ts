@@ -448,6 +448,26 @@ export async function processIncomingMessage(
           );
         }
 
+        // If we matched a button option but there's no connected edge, the flow simply ends here.
+        if (!matchedEdge && currentNode.type === 'buttons') {
+          const options = currentNode.data?.options || [];
+          const matchedOptionIndex = options.findIndex((opt: string) => {
+            const cleanOpt = opt.toLowerCase();
+            return cleanOpt.includes(incomingText) ||
+                   (opt.match(/\d+/) && opt.match(/\d+/)![0] === incomingText);
+          });
+          
+          if (matchedOptionIndex !== -1) {
+            flowExecuted = true;
+            // Clean up session state since there is no next node
+            await prisma.conversationState.deleteMany({
+              where: { phone: cleanIdentifier, channel },
+            });
+            await chargeCredits(userId, 0.005, channel);
+            return;
+          }
+        }
+
         if (matchedEdge) {
           flowExecuted = true;
           const resultNodeId = await executeNode(matchedEdge.target, json, cleanIdentifier, userId, channel, sessionId);

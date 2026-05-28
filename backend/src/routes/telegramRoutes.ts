@@ -86,7 +86,7 @@ router.post('/webhook/:botId', async (req, res) => {
     });
 
     // ── Run Flow Engine ───────────────────────────────────────────────────────
-    await processIncomingMessage(text, chatId, bot.userId, 'TELEGRAM', bot.token);
+    await processIncomingMessage(text, chatId, bot.userId, 'TELEGRAM', bot.id);
 
   } catch (err) {
     console.error('[Telegram Webhook] Error:', err);

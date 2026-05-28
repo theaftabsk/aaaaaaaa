@@ -25,7 +25,7 @@ export async function createCampaign(req: AuthenticatedRequest, res: Response) {
   const userId = req.user?.id;
   if (!userId) return res.status(401).json({ error: 'Unauthorized.' });
 
-  const { name, messageBody, targetGroupIds, targetLabelIds, status, mediaUrl, mediaType, manualNumbers } = req.body;
+  const { name, messageBody, targetGroupIds, targetLabelIds, status, mediaUrl, mediaType, manualNumbers, templateName, templateLanguage } = req.body;
 
   if (!name || !messageBody) {
     return res.status(400).json({ error: 'Name and message body are required.' });
@@ -93,6 +93,8 @@ export async function createCampaign(req: AuthenticatedRequest, res: Response) {
         status: status || 'PROCESSING',
         mediaUrl,
         mediaType,
+        templateName: templateName || null,
+        templateLanguage: templateLanguage || null,
         targetGroupIds: targetGroupIds || [],
         targetLabelIds: targetLabelIds || [],
         totalTarget: targets.length,
@@ -119,7 +121,10 @@ export async function createCampaign(req: AuthenticatedRequest, res: Response) {
           sessionId,
           userId,
           recipient: target.phone,
+          recipientName: target.name,
           text: messageBody.replace(/\{\{name\}\}/g, target.name),
+          templateName: campaign.templateName || undefined,
+          templateLanguage: campaign.templateLanguage || undefined,
         });
       }
     }

@@ -115,13 +115,22 @@ export async function sendReplyUnified(
 
   // ─── TELEGRAM ────────────────────────────────────────────────────────────────
   if (channel === 'TELEGRAM') {
-    // sessionId = telegram bot token for this message
+    // sessionId = telegram bot ID
     if (!sessionId) {
-      console.warn(`[sendReplyUnified] No Telegram bot token provided for user ${userId}`);
+      console.warn(`[sendReplyUnified] No Telegram bot ID provided for user ${userId}`);
       return;
     }
 
-    const telegramApiUrl = `https://api.telegram.org/bot${sessionId}/sendMessage`;
+    const bot = await prisma.telegramBot.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!bot) {
+      console.warn(`[sendReplyUnified] Telegram bot not found for ID ${sessionId}`);
+      return;
+    }
+
+    const telegramApiUrl = `https://api.telegram.org/bot${bot.token}/sendMessage`;
     try {
       const res = await fetch(telegramApiUrl, {
         method: 'POST',
@@ -145,7 +154,7 @@ export async function sendReplyUnified(
       await prisma.message.create({
         data: {
           userId,
-          sessionId: `TELEGRAM:${sessionId.slice(0, 10)}`,
+          sessionId: `TELEGRAM:${sessionId}`,
           from: 'Bot',
           to,
           body: text,

@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { sendReplyUnified } from '../services/messagingService';
+import { io } from '../index';
+import { processIncomingMessage } from '../services/flowEngine';
 
 const router = Router();
 
@@ -418,6 +420,105 @@ router.get('/widget/embed.js', async (req: Request, res: Response) => {
       }
     })();
   `);
+});
+
+// Endpoint for Meta WhatsApp Cloud API Webhooks (Verification)
+// Method: GET /api/webhooks/meta
+router.get('/meta', (req: Request, res: Response) => {
+  const verify_token = process.env.META_WEBHOOK_VERIFY_TOKEN;
+
+  let mode = req.query['hub.mode'] as string;
+  let token = req.query['hub.verify_token'] as string;
+  let challenge = req.query['hub.challenge'] as string;
+
+  if (mode && token) {
+    if (mode === 'subscribe' && token === verify_token) {
+      console.log('META WEBHOOK_VERIFIED');
+      res.status(200).send(challenge);
+    } else {
+      res.sendStatus(403);
+    }
+  } else {
+    res.sendStatus(400);
+  }
+});
+
+// Endpoint for Meta WhatsApp Cloud API Webhooks (Incoming Messages)
+// Method: POST /api/webhooks/meta
+router.post('/meta', async (req: Request, res: Response) => {
+  const body = req.body;
+
+  if (body.object === 'whatsapp_business_account') {
+    res.sendStatus(200); // Always acknowledge immediately to Meta
+
+    for (const entry of body.entry) {
+      for (const change of entry.changes) {
+        if (change.value && change.value.messages && change.value.messages[0]) {
+          const message = change.value.messages[0];
+          const metadata = change.value.metadata;
+          const phoneNumberId = metadata.phone_number_id;
+
+          const from = message.from; // Sender's phone number
+          const text = message.text?.body; // Only handling text for MVP
+          
+          if (!text) continue;
+
+          try {
+            // Find user by apiPhoneNumberId
+            const user = await prisma.user.findFirst({
+              where: { apiPhoneNumberId: phoneNumberId }
+            });
+
+            if (user) {
+              // 1. Upsert Contact
+              await prisma.contact.upsert({
+                where: { userId_phone: { userId: user.id, phone: from } },
+                update: { updatedAt: new Date() },
+                create: {
+                  userId: user.id,
+                  phone: from,
+                  name: `WhatsApp Lead (${from.slice(-4)})`,
+                  channel: 'WHATSAPP'
+                }
+              });
+
+              // 2. Save incoming message
+              const savedMsg = await prisma.message.create({
+                data: {
+                  userId: user.id,
+                  sessionId: 'API', // WhatsApp Cloud API
+                  from: from,
+                  to: 'Bot',
+                  body: text,
+                  direction: 'INCOMING',
+                  type: 'TEXT',
+                  channel: 'WHATSAPP'
+                }
+              });
+
+              // 3. Emit real-time event to Inbox
+              io.to(user.id).emit('whatsapp:message', {
+                id: savedMsg.id,
+                from: from,
+                to: 'Bot',
+                body: text,
+                direction: 'INCOMING',
+                createdAt: savedMsg.createdAt,
+                sessionId: 'API'
+              });
+
+              // 4. Run Flow Engine / Chatbot logic
+              await processIncomingMessage(text, from, user.id, 'WHATSAPP', 'API');
+            }
+          } catch (error) {
+            console.error('Meta Webhook message processing error:', error);
+          }
+        }
+      }
+    }
+  } else {
+    res.sendStatus(404);
+  }
 });
 
 export default router;

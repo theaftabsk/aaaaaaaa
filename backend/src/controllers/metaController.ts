@@ -206,3 +206,76 @@ export async function verifyAndSaveMetaCredentials(req: AuthenticatedRequest, re
     res.status(500).json({ error: error.message || 'Verification or save failed.' });
   }
 }
+
+/**
+ * Get list of approved WhatsApp Message Templates from Meta
+ * GET /api/whatsapp/meta/templates
+ */
+export async function getMetaTemplates(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || !user.apiAccessToken || !user.apiWabaId) {
+      return res.status(400).json({ error: 'Meta Cloud API is not connected.' });
+    }
+
+    const token = decrypt(user.apiAccessToken);
+    
+    // Sandbox bypass
+    if (token.startsWith('EAAG_fb_oauth_token_')) {
+      return res.json([
+        {
+          id: 'temp_1',
+          name: 'eid_mubarak_marketing',
+          status: 'APPROVED',
+          category: 'MARKETING',
+          language: 'bn',
+          components: [
+            { type: 'BODY', text: 'ঈদ মোবারক {{1}}! ✨ আমাদের বিশেষ ঈদ অফারে আপনার জন্য রয়েছে ২৫% ডিসকাউন্ট। এখনই অর্ডার করুন: {{2}}' }
+          ]
+        },
+        {
+          id: 'temp_2',
+          name: 'order_confirmation_utility',
+          status: 'APPROVED',
+          category: 'UTILITY',
+          language: 'en_US',
+          components: [
+            { type: 'BODY', text: 'Hello {{1}}, your order has been confirmed! 📦 We will notify you once it ships. Thank you for shopping with us!' }
+          ]
+        },
+        {
+          id: 'temp_3',
+          name: '3p_direct_integration_test_template',
+          status: 'APPROVED',
+          category: 'UTILITY',
+          language: 'en_US',
+          components: [
+            { type: 'BODY', text: 'Hello! This is a test message.' }
+          ]
+        }
+      ]);
+    }
+
+    // Fetch from Meta WABA
+    const responseData: any = await fetchMetaAPI(`${user.apiWabaId}/message_templates?fields=id,name,status,category,language,components`, token);
+    const templates = (responseData.data || []).map((temp: any) => ({
+      id: temp.id,
+      name: temp.name,
+      status: temp.status,
+      category: temp.category,
+      language: temp.language,
+      components: temp.components
+    }));
+
+    res.json(templates);
+  } catch (error: any) {
+    console.error('Get Meta templates error:', error);
+    res.status(500).json({ error: error.message || 'Failed to retrieve WhatsApp Message Templates from Meta.' });
+  }
+}

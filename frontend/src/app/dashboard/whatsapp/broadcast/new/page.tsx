@@ -12,6 +12,7 @@ interface Template {
   id: string;
   name: string;
   body: string;
+  language?: string;
 }
 
 export default function NewCampaignBuilder() {
@@ -21,6 +22,11 @@ export default function NewCampaignBuilder() {
   const [labels, setLabels] = useState<any[]>([]);
   const [dbContacts, setDbContacts] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
+
+  // Meta Templates
+  const [metaTemplates, setMetaTemplates] = useState<any[]>([]);
+  const [selectedTemplateName, setSelectedTemplateName] = useState('');
+  const [selectedTemplateLanguage, setSelectedTemplateLanguage] = useState('en_US');
 
   // Form State
   const [campaignName, setCampaignName] = useState('');
@@ -167,20 +173,48 @@ export default function NewCampaignBuilder() {
       }
     };
 
+    const fetchMetaTemplates = async () => {
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/whatsapp/meta/templates`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const mapped = data.map((t: any) => {
+            const bodyComponent = t.components?.find((c: any) => c.type === 'BODY');
+            return {
+              id: t.id,
+              name: t.name,
+              body: bodyComponent?.text || 'Template message',
+              language: t.language || 'en_US'
+            };
+          });
+          setMetaTemplates(mapped);
+        }
+      } catch (err) {
+        console.error('Error fetching Meta templates:', err);
+      }
+    };
+
     fetchSessions();
     fetchGroups();
     fetchLabels();
     fetchContacts();
+    fetchMetaTemplates();
   }, []);
 
   // Update message body when template changes
   const handleTemplateChange = (id: string) => {
     setSelectedTemplateId(id);
-    const selected = templates.find(t => t.id === id);
+    const selected = [...metaTemplates, ...templates].find(t => t.id === id);
     if (selected) {
       setMessageBody(selected.body);
+      setSelectedTemplateName(selected.name);
+      setSelectedTemplateLanguage(selected.language || 'en_US');
     } else {
       setMessageBody('');
+      setSelectedTemplateName('');
+      setSelectedTemplateLanguage('en_US');
     }
   };
 
@@ -351,7 +385,9 @@ export default function NewCampaignBuilder() {
             ...csvNumbers
           ],
           status: 'PROCESSING',
-          scheduledAt: scheduleTime ? new Date(scheduleTime).toISOString() : null
+          scheduledAt: scheduleTime ? new Date(scheduleTime).toISOString() : null,
+          templateName: selectedTemplateName || null,
+          templateLanguage: selectedTemplateLanguage || null
         })
       });
 
@@ -454,9 +490,14 @@ export default function NewCampaignBuilder() {
                     ) : (
                       <>
                         <option value="">Please select a template...</option>
-                        {templates.map(t => (
-                           <option key={t.id} value={t.id}>{t.name}</option>
-                        ))}
+                        {[...metaTemplates, ...templates].map(t => {
+                          const isMeta = metaTemplates.some(mt => mt.id === t.id);
+                          return (
+                            <option key={t.id} value={t.id}>
+                              {t.name} {isMeta ? '🌐 (Meta Cloud Template)' : '📝 (Vexo Mock Template)'}
+                            </option>
+                          );
+                        })}
                       </>
                     )}
                   </select>
