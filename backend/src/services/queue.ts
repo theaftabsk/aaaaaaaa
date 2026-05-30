@@ -15,7 +15,7 @@ interface CampaignJobData {
   templateLanguage?: string;
 }
 
-function getTemplateParameters(templateName: string, recipientName: string): any[] {
+function getTemplateParameters(templateName: string, recipientName: string, text: string): any[] {
   const name = recipientName || 'Customer';
   switch (templateName) {
     case '3p_direct_integration_test_template':
@@ -38,14 +38,29 @@ function getTemplateParameters(templateName: string, recipientName: string): any
         { type: 'text', text: name },
         { type: 'text', text: 'vexo.link/deal' }
       ];
-    default:
-      if (templateName.toLowerCase().includes('test')) {
-        return [];
-      }
-      return [
-        { type: 'text', text: name }
-      ];
   }
+
+  if (templateName.toLowerCase().includes('test')) {
+    return [];
+  }
+
+  // Count the number of placeholders (e.g. {{1}}, {{2}}) in the template text
+  const matches = (text || '').match(/\{\{\d+\}\}/g);
+  const paramCount = matches ? matches.length : 0;
+
+  if (paramCount === 0) {
+    return [];
+  }
+
+  const params: any[] = [];
+  for (let i = 1; i <= paramCount; i++) {
+    if (i === 1) {
+      params.push({ type: 'text', text: name });
+    } else {
+      params.push({ type: 'text', text: 'vexo.link/deal' });
+    }
+  }
+  return params;
 }
 
 // 1. Initialize the Broadcast Queue
@@ -81,7 +96,7 @@ export const broadcastWorker = new Worker<CampaignJobData>(
 
       let requestBody: any;
       if (templateName) {
-        const params = getTemplateParameters(templateName, recipientName || '');
+        const params = getTemplateParameters(templateName, recipientName || '', text || '');
         requestBody = {
           messaging_product: 'whatsapp',
           to: recipient.replace(/\D/g, ''),
