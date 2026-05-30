@@ -21,7 +21,7 @@ export default function NewCampaignBuilder() {
   const [groups, setGroups] = useState<any[]>([]);
   const [labels, setLabels] = useState<any[]>([]);
   const [dbContacts, setDbContacts] = useState<any[]>([]);
-  const [contacts, setContacts] = useState<any[]>([]);
+  const [csvContacts, setCsvContacts] = useState<any[]>([]);
 
   // Meta Templates
   const [metaTemplates, setMetaTemplates] = useState<any[]>([]);
@@ -142,7 +142,6 @@ export default function NewCampaignBuilder() {
         if (res.ok) {
           const data = await res.json();
           setDbContacts(data);
-          setContacts(data); // Set default active contact list to DB contacts
         }
       } catch (err) {
         console.error('Error fetching contacts:', err);
@@ -182,7 +181,7 @@ export default function NewCampaignBuilder() {
   // Update message body when template changes
   const handleTemplateChange = (id: string) => {
     setSelectedTemplateId(id);
-    const selected = [...metaTemplates, ...templates].find(t => t.id === id);
+    const selected = metaTemplates.find(t => t.id === id);
     if (selected) {
       setMessageBody(selected.body);
       setSelectedTemplateName(selected.name);
@@ -196,27 +195,21 @@ export default function NewCampaignBuilder() {
 
   const toggleGroupSelection = (groupId: string) => {
     setSelectedGroupIds(prev => {
-      let next;
       if (prev.includes(groupId)) {
-        next = prev.filter(id => id !== groupId);
+        return prev.filter(id => id !== groupId);
       } else {
-        next = [...prev, groupId];
+        return [...prev, groupId];
       }
-      if (contacts.some(c => c.id.startsWith('csv-'))) setContacts(dbContacts);
-      return next;
     });
   };
 
   const toggleLabelSelection = (labelId: string) => {
     setSelectedLabelIds(prev => {
-      let next;
       if (prev.includes(labelId)) {
-        next = prev.filter(id => id !== labelId);
+        return prev.filter(id => id !== labelId);
       } else {
-        next = [...prev, labelId];
+        return [...prev, labelId];
       }
-      if (contacts.some(c => c.id.startsWith('csv-'))) setContacts(dbContacts);
-      return next;
     });
   };
 
@@ -245,26 +238,80 @@ export default function NewCampaignBuilder() {
         };
       });
 
-      setContacts(parsed);
+      setCsvContacts(parsed);
       alert(`Successfully loaded ${parsed.length} contacts from Excel/CSV!`);
     };
     reader.readAsText(file);
   };
 
-  // Filter contacts based on selected groups & labels (when not using CSV upload override)
+  // Filter contacts based on selected groups, labels, CSV, and manual numbers
   const getFilteredContacts = () => {
-    // If the contact list has been replaced by CSV parser, return that
-    const isCsvMode = contacts.some(c => c.id.startsWith('csv-'));
-    if (isCsvMode) return contacts;
+    const list: any[] = [];
+    const seenPhones = new Set<string>();
 
-    let list = [...dbContacts];
-    if (selectedGroupIds.length > 0 || selectedLabelIds.length > 0) {
-      list = list.filter(contact => {
-        const inGroup = selectedGroupIds.length > 0 && contact.groups?.some((g: any) => selectedGroupIds.includes(g.id));
-        const inLabel = selectedLabelIds.length > 0 && contact.labels?.some((l: any) => selectedLabelIds.includes(l.id));
-        return inGroup || inLabel;
-      });
+    const addContact = (contact: any) => {
+      const clean = (contact.phone || '').replace(/\D/g, '');
+      if (clean && !seenPhones.has(clean)) {
+        seenPhones.add(clean);
+        list.push({
+          ...contact,
+          phone: clean
+        });
+      }
+    };
+
+    // 1. CSV Contacts
+    if (csvContacts.length > 0) {
+      csvContacts.forEach(addContact);
     }
+
+    // 2. Groups
+    if (selectedGroupIds.length > 0) {
+      dbContacts
+        .filter(c => c.groups?.some((g: any) => selectedGroupIds.includes(g.id)))
+        .forEach(addContact);
+    }
+
+    // 3. Labels
+    if (selectedLabelIds.length > 0) {
+      dbContacts
+        .filter(c => c.labels?.some((l: any) => selectedLabelIds.includes(l.id)))
+        .forEach(addContact);
+    }
+
+    // 4. Manual Numbers
+    const parsedManual = manualNumbers
+      ? manualNumbers
+          .split(/[,\s\n]+/)
+          .map(n => n.trim().replace(/\D/g, ''))
+          .filter(n => n.length > 5)
+          .map(n => phoneFormat === 'without_country' && countryCode ? `${countryCode.replace('+', '')}${n}` : n)
+      : [];
+
+    parsedManual.forEach((num, index) => {
+      if (!seenPhones.has(num)) {
+        seenPhones.add(num);
+        list.push({
+          id: `manual-${index}-${num}`,
+          name: 'Customer',
+          phone: num,
+          groups: [],
+          labels: []
+        });
+      }
+    });
+
+    // 5. Fallback: if no filters, CSV, or manual numbers are applied, default to all database contacts
+    if (
+      list.length === 0 &&
+      selectedGroupIds.length === 0 &&
+      selectedLabelIds.length === 0 &&
+      csvContacts.length === 0 &&
+      parsedManual.length === 0
+    ) {
+      dbContacts.forEach(addContact);
+    }
+
     return list;
   };
 
@@ -319,7 +366,7 @@ export default function NewCampaignBuilder() {
       return;
     }
     if (targetCount === 0) {
-      alert('No target contacts found. Select groups, labels, or upload a CSV file.');
+      alert('No target contacts found. Select groups, labels, upload a CSV file, or enter manual numbers.');
       return;
     }
     if (!messageBody) {
@@ -330,10 +377,9 @@ export default function NewCampaignBuilder() {
     setIsSending(true);
     const token = localStorage.getItem('token');
 
-    const isCsvMode = contacts.some(c => c.id.startsWith('csv-'));
-    const csvNumbers = isCsvMode
-      ? contacts
-          .map(c => c.phone.replace(/\D/g, ''))
+    const csvNumbers = csvContacts.length > 0
+      ? csvContacts
+          .map(c => (c.phone || '').replace(/\D/g, ''))
           .map(n => phoneFormat === 'without_country' && countryCode ? `${countryCode.replace('+', '')}${n}` : n)
       : [];
 
@@ -643,9 +689,20 @@ export default function NewCampaignBuilder() {
 
               {/* CSV Upload */}
               <div className="space-y-2">
-                <div className="flex items-center gap-2 text-slate-700">
-                  <FileSpreadsheet className="w-4 h-4 text-emerald-500" />
-                  <span className="text-[12px] font-bold text-slate-550 uppercase tracking-wider">Upload Excel / CSV</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-slate-700">
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-500" />
+                    <span className="text-[12px] font-bold text-slate-550 uppercase tracking-wider">Upload Excel / CSV</span>
+                  </div>
+                  {csvContacts.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setCsvContacts([])}
+                      className="text-[11px] font-bold text-red-500 hover:text-red-600 hover:underline"
+                    >
+                      Clear CSV
+                    </button>
+                  )}
                 </div>
                 
                 <div className="border border-dashed border-slate-300 rounded-xl p-6 text-center bg-slate-50 hover:bg-slate-100/50 transition-colors relative cursor-pointer">
@@ -655,8 +712,20 @@ export default function NewCampaignBuilder() {
                     onChange={handleCsvUpload}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
                   />
-                  <p className="text-xs text-slate-600 font-semibold">Click to select or drag your CSV/Text file here</p>
-                  <p className="text-[10px] text-slate-400 mt-1">Format: name,phone or just phone numbers</p>
+                  {csvContacts.length > 0 ? (
+                    <>
+                      <p className="text-xs text-emerald-600 font-bold flex items-center justify-center gap-1.5">
+                        <Check className="w-4 h-4" />
+                        Loaded {csvContacts.length} contacts successfully!
+                      </p>
+                      <p className="text-[10px] text-slate-400 mt-1">Click or drag a new file to replace</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs text-slate-600 font-semibold">Click to select or drag your CSV/Text file here</p>
+                      <p className="text-[10px] text-slate-400 mt-1">Format: name,phone or just phone numbers</p>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -824,6 +893,54 @@ export default function NewCampaignBuilder() {
                 <div className="flex items-center justify-between text-xs text-slate-500">
                   <span>Targeted Recipients:</span>
                   <span className="font-black text-blue-600 text-sm">{targetCount} Contacts</span>
+                </div>
+
+                {/* Source Breakdown */}
+                <div className="space-y-2 py-2.5 border-t border-b border-slate-100">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Source Breakdown</p>
+                  <div className="text-xs space-y-1.5">
+                    {/* Groups */}
+                    {selectedGroupIds.length > 0 && (
+                      <div className="flex justify-between text-slate-600">
+                        <span>Groups ({selectedGroupIds.length}):</span>
+                        <span className="font-semibold text-slate-700">{dbContacts.filter(c => c.groups?.some((g: any) => selectedGroupIds.includes(g.id))).length} contacts</span>
+                      </div>
+                    )}
+                    
+                    {/* Labels */}
+                    {selectedLabelIds.length > 0 && (
+                      <div className="flex justify-between text-slate-600">
+                        <span>Labels ({selectedLabelIds.length}):</span>
+                        <span className="font-semibold text-slate-700">{dbContacts.filter(c => c.labels?.some((l: any) => selectedLabelIds.includes(l.id))).length} contacts</span>
+                      </div>
+                    )}
+
+                    {/* CSV Upload */}
+                    {csvContacts.length > 0 && (
+                      <div className="flex justify-between text-slate-600">
+                        <span>Excel / CSV:</span>
+                        <span className="font-semibold text-slate-700">{csvContacts.length} contacts</span>
+                      </div>
+                    )}
+
+                    {/* Manual Numbers */}
+                    {manualNumbers && (
+                      <div className="flex justify-between text-slate-600">
+                        <span>Manual Numbers:</span>
+                        <span className="font-semibold text-slate-700">
+                          {manualNumbers.split(/[,\s\n]+/).filter(n => n.trim().replace(/\D/g, '').length > 5).length} contacts
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Fallback All Contacts */}
+                    {selectedGroupIds.length === 0 && selectedLabelIds.length === 0 && csvContacts.length === 0 && !manualNumbers && (
+                      <div className="flex justify-between text-slate-500 italic">
+                        <span>All Contacts (Fallback):</span>
+                        <span className="font-semibold">{dbContacts.length} contacts</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Avatar Initial Lists */}
